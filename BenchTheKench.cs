@@ -27,8 +27,8 @@ namespace BenchTheKench
         {
             if (Player.Instance.Hero != Champion.TahmKench) return;
 
-            Menu = MainMenu.AddMenu("Kench Unbenched", "kbswag");
-            Menu.AddGroupLabel("Kench Unbenched");
+            Menu = MainMenu.AddMenu("BenchTheKench", "kbswag");
+            Menu.AddGroupLabel("BenchTheKench");
 
             ComboMenu = Menu.AddSubMenu("Combo Menu", "combomenuKench");
             ComboMenu.AddGroupLabel("Combo Settings");
