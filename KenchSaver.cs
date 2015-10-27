@@ -34,7 +34,7 @@ namespace BenchTheKench
 
     class KenchSaver
     {
-        private static Spell.Targeted W
+        private static Spell. W
         {
             get { return BenchTheKench.WSpellSwallow; }
         }
