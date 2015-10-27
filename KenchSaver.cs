@@ -1,0 +1,152 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using LeagueSharp;
+using LeagueSharp.Common;
+using Color = System.Drawing.Color;
+
+namespace BenchTheKench
+{
+
+    public class SaveUnit
+    {
+        public SaveUnit(AIHeroClient unit)
+        {
+            Unit = unit;
+        }
+
+        public AIHeroClient Unit;
+
+        public readonly Dictionary<float, float> IncDamage = new Dictionary<float, float>();
+        public readonly Dictionary<float, float> InstDamage = new Dictionary<float, float>();
+        public float IncomingDamage
+        {
+            get { return IncDamage.Sum(e => e.Value) + InstDamage.Sum(e => e.Value); }
+        }
+
+        public bool IsEnabled
+        {
+            get { return BenchTheKench.SaveMenu["save" + Unit.ChampionName].Cast<CheckBox>().CurrentValue; }
+        }
+    }
+
+    class KenchSaver
+    {
+        private static Spell.Targeted W
+        {
+            get { return BenchTheKench.WSpellSwallow; }
+        }
+
+        public static void Initialize()
+        {
+            Game.OnUpdate += OnUpdate;
+            Obj_AI_Base.OnProcessSpellCast += OnProcessSpellCast;
+
+            BenchTheKench.SaveMenu = BenchTheKench.Menu.AddSubMenu("Save Settings");
+            BenchTheKench.SaveMenu.AddGroupLabel("Saving Allies Settings");
+            BenchTheKench.SaveMenu.Add("enableSaving", new CheckBox("Saving Enabled"));
+            BenchTheKench.SaveMenu.AddSeparator();
+
+            foreach (var source in EntityManager.Heroes.Allies.Where(a => !a.IsMe))
+            {
+                BenchTheKench.SaveMenu.Add("save" + source.ChampionName, new CheckBox("Save " + source.ChampionName));
+                UnitsToSave.Add(new SaveUnit(source));
+            }
+        }
+
+        public static List<SaveUnit> UnitsToSave = new List<SaveUnit>(); 
+            
+
+        private static void OnUpdate(EventArgs args)
+        {
+            if (BenchTheKench.SaveMenu["enableSaving"].Cast<CheckBox>().CurrentValue && W.IsReady())
+            {
+                foreach (var saveUnit in UnitsToSave.Where(a => a.IsEnabled && a.Unit.Distance(Player.Instance) < 300))
+                {
+                    if (saveUnit.Unit.HealthPercent <= 10 && saveUnit.Unit.CountEnemiesInRange(800) > 0 ||
+                        saveUnit.IncomingDamage > saveUnit.Unit.Health)
+                        Player.CastSpell(SpellSlot.W, saveUnit.Unit);
+                }
+            }
+            foreach (var unit in UnitsToSave)
+            {
+                // Check spell arrival
+                foreach (var entry in unit.IncDamage.Where(entry => entry.Key < Game.Time).ToArray())
+                {
+                    unit.IncDamage.Remove(entry.Key);
+                }
+
+                // Instant damage removal
+                foreach (var entry in unit.InstDamage.Where(entry => entry.Key < Game.Time).ToArray())
+                {
+                    unit.InstDamage.Remove(entry.Key);
+                }
+            }
+        }
+
+        private static void OnProcessSpellCast(Obj_AI_Base sender, GameObjectProcessSpellCastEventArgs args)
+        {
+            if (sender.IsEnemy)
+            {
+                foreach (var saveUnit in UnitsToSave.Where(a => a.IsEnabled))
+                {
+                    // Calculations to save your souldbound
+                    if (saveUnit.Unit != null && BenchTheKench.SaveMenu["enableSaving"].Cast<CheckBox>().CurrentValue)
+                    {
+                        // Auto attacks
+                        if ((!(sender is AIHeroClient) || args.SData.IsAutoAttack()) && args.Target != null &&
+                            args.Target.NetworkId == saveUnit.Unit.NetworkId)
+                        {
+                            // Calculate arrival time and damage
+                            saveUnit.IncDamage[
+                                saveUnit.Unit.ServerPosition.Distance(sender.ServerPosition)/args.SData.MissileSpeed +
+                                Game.Time] = sender.GetAutoAttackDamage(saveUnit.Unit);
+                        }
+                        // Sender is a hero
+                        else
+                        {
+                            var attacker = sender as AIHeroClient;
+                            if (attacker != null)
+                            {
+                                var slot = attacker.GetSpellSlotFromName(args.SData.Name);
+
+                                if (slot != SpellSlot.Unknown)
+                                {
+                                    if (slot == attacker.GetSpellSlotFromName("SummonerDot") && args.Target != null &&
+                                        args.Target.NetworkId == saveUnit.Unit.NetworkId)
+                                    {
+                                        // Ingite damage (dangerous)
+                                        saveUnit.InstDamage[Game.Time + 2] = attacker.GetSummonerSpellDamage(saveUnit.Unit,
+                                            DamageLibrary.SummonerSpells.Ignite);
+                                    }
+                                    else
+                                    {
+                                        switch (slot)
+                                        {
+                                            case SpellSlot.Q:
+                                            case SpellSlot.W:
+                                            case SpellSlot.E:
+                                            case SpellSlot.R:
+
+                                                if ((args.Target != null && args.Target.NetworkId == saveUnit.Unit.NetworkId) ||
+                                                    args.End.Distance(saveUnit.Unit.ServerPosition) <
+                                                    Math.Pow(args.SData.LineWidth, 2))
+                                                {
+                                                    // Instant damage to target
+                                                    saveUnit.InstDamage[Game.Time + 2] = attacker.GetSpellDamage(saveUnit.Unit, slot);
+                                                }
+
+                                                break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
