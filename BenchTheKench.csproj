@@ -63,7 +63,6 @@
   <ItemGroup>
     <Compile Include="ColourMenuItem.cs" />
     <Compile Include="Extentions.cs" />
-    <Compile Include="KenchCheckManager.cs" />
     <Compile Include="KenchSaver.cs" />
     <Compile Include="BenchTheKench.cs" />
     <Compile Include="AssemblyInfo.cs" />
